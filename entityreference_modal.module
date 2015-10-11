@@ -1,0 +1,290 @@
+<?php
+
+/**
+ * Implements hook_menu().
+ */
+function entityreference_modal_menu() {
+  $items = array();
+  $items['entityreference-modal/actions/%/%/%'] = array(
+    // Callback arguments:
+    // 2 => field name,
+    // 3 => host entity type,
+    // 4 => host bundle.
+    'page callback' => 'entityreference_modal_actions_menu_callback',
+    'page arguments' => array(2),
+    'access callback' => 'entityreference_modal_actions_access_callback',
+    'access arguments' => array('single', 2, 3, 4),
+    'type' => MENU_CALLBACK,
+    'file' => 'entityreference_modal.pages.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_module_implements_alter().
+ */
+function entityreference_modal_module_implements_alter(&$implementations, $hook) {
+  if ($hook == 'menu_alter') {
+    // Our module should alter menu items after the entity_translation module.
+    $group = $implementations['entityreference_modal'];
+    unset($implementations['entityreference_modal']);
+    $implementations['entityreference_modal'] = $group;
+    // And the ctools_automodal should be really the last one.
+    $group = $implementations['ctools_automodal'];
+    unset($implementations['ctools_automodal']);
+    $implementations['ctools_automodal'] = $group;
+  }
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function entityreference_modal_menu_alter(&$items) {
+
+  // Create "modal" clones of the original paths.
+  foreach (_entityreference_modal_entity_path_mapping() as $entity_type => $path_mapping) {
+    foreach ($path_mapping as $definition) {
+      if (isset($definition['menu_path'])) {
+        if (isset($items[$definition['menu_path']])) {
+          // Clone path "as is".
+          $items[$definition['menu_path'] . '/entityreference-modal'] = array(
+              'modal' => TRUE,
+              'type' => MENU_CALLBACK,
+            ) + $items[$definition['menu_path']];
+        }
+        elseif (strpos($definition['menu_path'], '[bundle-url]') !== FALSE) {
+          // If we have "[bundle-url]" placeholder in the path, we search for
+          // all available bundles and create clones of all required paths.
+          $entity_info = entity_get_info($entity_type);
+          foreach (array_keys($entity_info['bundles']) as $bundle) {
+            if ($entity_type == 'node') {
+              // Node module uses dashed instead of underscores for bundles in
+              // URLs.
+              $bundle = str_replace('_', '-', $bundle);
+            }
+            $path = str_replace('[bundle-url]', $bundle, $definition['menu_path']);
+            if (isset($items[$path])) {
+              $items[$path . '/entityreference-modal'] = array(
+                  'modal' => TRUE,
+                  'type' => MENU_CALLBACK,
+                ) + $items[$path];
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_admin_paths().
+ */
+function entityreference_modal_admin_paths() {
+  // Entity edit forms are usually used with admin themes.
+  return array(
+    '*/entityreference-modal' => TRUE,
+    '*/entityreference-modal/*' => TRUE,
+  );
+}
+
+/**
+ * Implements hook_drupal_goto_alter().
+ */
+function entityreference_modal_drupal_goto_alter(&$path, &$options, &$http_response_code) {
+  if (entityreference_modal_is_modal()) {
+    // In some cases we may be redirected to the almost same path. For example,
+    // the entity_translation module allows to change the translation source
+    // language with a redirect from, say, "node/edit/add/en/de" to
+    // "node/edit/add/it/de" path. Ensure that modal callback is still used in
+    // such cases.
+    $path .= '/entityreference-modal/ajax';
+  }
+}
+
+/**
+ * Menu access callback for the actions menu callback.
+ *
+ * @param string $type
+ * @param string $field_name
+ * @param string $host_entity_type
+ * @param string $host_bundle
+ *
+ * @return bool
+ */
+function entityreference_modal_actions_access_callback($type, $field_name, $host_entity_type, $host_bundle) {
+  $field = field_info_field($field_name);
+  $entity_type = $field['settings']['target_type'];
+  if (!entity_translation_enabled($entity_type)) {
+    return FALSE;
+  }
+  $path_mapping = _entityreference_modal_entity_path_mapping();
+  if (!isset($path_mapping[$entity_type])) {
+    return FALSE;
+  }
+  if (!array_key_exists('entity_id', $_POST) || !($_POST['entity_id'] !== '' && ($_POST['entity_id'] === 'null' || ctype_digit($_POST['entity_id'])))) {
+    return FALSE;
+  }
+  if ($_POST['entity_id'] !== 'null' && !entity_load_single($entity_type, $_POST['entity_id'])) {
+    return FALSE;
+  }
+  return entityreference_autocomplete_access_callback($type, $field_name, $host_entity_type, $host_bundle);
+}
+
+/**
+ * Implements hook_field_widget_form_alter().
+ */
+function entityreference_modal_field_widget_form_alter(&$element, &$form_state, $context) {
+  if ($context['instance']['widget']['type'] == 'entityreference_autocomplete') {
+    $host_entity_type = $element['target_id']['#entity_type'];
+    $host_bundle = $element['target_id']['#bundle'];
+    $field_name = $context['field']['field_name'];
+
+    $element['#after_build'][] = 'entityreference_modal_autocomplete_widget_after_build';
+    $element['#attached']['js'][] = array(
+      'type' => 'setting',
+      'data' => array(
+        'entityreferenceModal' => array(
+          'fields' => array(
+            $field_name => array(
+              'actionsUrl' => url("entityreference-modal/actions/$field_name/$host_entity_type/$host_bundle"),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/**
+ * After-build callback for the "entityreference_autocomplete" field widgets.
+ */
+function entityreference_modal_autocomplete_widget_after_build($widget) {
+  $widget['#attached']['js'][] = drupal_get_path('module', 'entityreference_modal') . '/entityreference_modal.js';
+  $widget['#attached']['js'][] = array(
+    'type' => 'setting',
+    'data' => array(
+      'entityreferenceModal' => array(
+        'elementIdToFieldNameMap' => array(
+          $widget['target_id']['#id'] => $widget['target_id']['#field_name'],
+        ),
+      ),
+    ),
+  );
+  if (empty($widget['#suffix'])) {
+    $widget['#suffix'] = '';
+  }
+  $widget['#suffix'] .= theme('ctools_dropdown', array(
+    'title' => t('Actions'),
+    'class' => 'entityreference-modal-actions',
+    'links' => array(
+      array(
+        'title' => t('Loading...'),
+        'href' => '',
+        'attributes' => array(
+          'onclick' => 'javascript: return false;',
+        ),
+      ),
+    ),
+  ));
+  return $widget;
+}
+
+/**
+ * Returns an array of path mapping definitions for supported entity types.
+ *
+ * List of used placeholders:
+ * [entity-id]
+ * [bundle]
+ * [bundle-url]
+ * [bundle-label]
+ * [source-langcode]
+ * [translation-langcode]
+ * [translation-language-label]
+ *
+ * @return array
+ */
+function _entityreference_modal_entity_path_mapping() {
+  $cache =& drupal_static(__FUNCTION__);
+  if ($cache !== NULL) {
+    return $cache;
+  }
+  $cache = array(
+    'node' => array(
+      'create-entity' => array(
+        'label' => t('Create [bundle-label]'),
+        'path' => 'node/add/[bundle]/entityreference-modal',
+        'menu_path' => 'node/add/[bundle-url]',
+      ),
+      'edit-entity' => array(
+        'label' => t('Edit'),
+        'path' => 'node/[entity-id]/edit/entityreference-modal',
+        'menu_path' => 'node/%node/edit',
+      ),
+      'add-translation' => array(
+        'label' => t('Add [translation-language-label]'),
+        'path' => 'node/[entity-id]/edit/add/[source-langcode]/[translation-langcode]/entityreference-modal',
+        'menu_path' => 'node/%node/edit/add/%entity_translation_language/%entity_translation_language',
+      ),
+      'edit-translation' => array(
+        'label' => t('Edit [translation-language-label]'),
+        'path' => 'node/[entity-id]/edit/[translation-langcode]/entityreference-modal',
+        'menu_path' => 'node/%node/edit/%entity_translation_language',
+      ),
+    ),
+  );
+  return $cache;
+}
+
+/**
+ * Checks if we are running in the modal context.
+ *
+ * @return bool
+ */
+function entityreference_modal_is_modal() {
+  return (bool) preg_match('~/entityreference-modal$~', current_path());
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter().
+ */
+function entityreference_modal_form_node_form_alter(&$form, &$form_state) {
+  if (entityreference_modal_is_modal()) {
+    // For the moment, the last submit callback of the node form is the best
+    // place to handle the execution and be sure that node was successfully
+    // created.
+    $form['actions']['submit']['#submit'][] = 'entityreference_modal_node_form_submit';
+    // Actions other than "Save" may break the modal. Hide them.
+    foreach (element_children($form['actions']) as $key) {
+      if ($key != 'submit') {
+        $form['actions'][$key]['#access'] = FALSE;
+      }
+    }
+  }
+}
+
+/**
+ * Additional submit callback for the node forms.
+ */
+function entityreference_modal_node_form_submit($form, &$form_state) {
+  if (entityreference_modal_is_modal()) {
+    entityreference_modal_close('node', $form_state['node']);
+  }
+}
+
+/**
+ * Prints AJAX commands that close ctools modal and perform other actions.
+ *
+ * @param string $entity_type
+ * @param string $entity
+ */
+function entityreference_modal_close($entity_type, $entity) {
+  $commands = array();
+  $commands[] = ctools_modal_command_dismiss();
+  $commands[] = array(
+    'command' => 'entityreference_modal_update_input',
+    'input_value' => entity_label($entity_type, $entity) . ' (' . entity_id($entity_type, $entity) . ')',
+    'messages' => theme('status_messages'),
+  );
+  print ajax_render($commands);
+  drupal_exit();
+}

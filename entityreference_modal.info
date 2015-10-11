@@ -1,0 +1,10 @@
+name = Entity Reference Modal
+description = Extends Entity Reference Autocomplete widget with modal in-place editing.
+core = 7.x
+package = Fields
+
+dependencies[] = entityreference
+dependencies[] = entity
+dependencies[] = ctools
+dependencies[] = ctools_automodal
+dependencies[] = entity_translation
