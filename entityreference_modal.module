@@ -159,6 +159,7 @@ function entityreference_modal_field_widget_form_alter(&$element, &$form_state, 
  * After-build callback for the "entityreference_autocomplete" field widgets.
  */
 function entityreference_modal_autocomplete_widget_after_build($widget) {
+  $widget['#attached']['js'][] = ctools_attach_js('modal');
   $widget['#attached']['js'][] = drupal_get_path('module', 'entityreference_modal') . '/entityreference_modal.js';
   $widget['#attached']['js'][] = array(
     'type' => 'setting',
