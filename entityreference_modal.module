@@ -249,16 +249,14 @@ function entityreference_modal_is_modal() {
  * Implements hook_form_BASE_FORM_ID_alter().
  */
 function entityreference_modal_form_node_form_alter(&$form, &$form_state) {
-  if (entityreference_modal_is_modal()) {
-    // For the moment, the last submit callback of the node form is the best
-    // place to handle the execution and be sure that node was successfully
-    // created.
-    $form['actions']['submit']['#submit'][] = 'entityreference_modal_node_form_submit';
-    // Actions other than "Save" may break the modal. Hide them.
-    foreach (element_children($form['actions']) as $key) {
-      if ($key != 'submit') {
-        $form['actions'][$key]['#access'] = FALSE;
-      }
+  // For the moment, the last submit callback of the node form is the best
+  // place to handle the execution and be sure that node was successfully
+  // created.
+  $form['actions']['submit']['#submit'][] = 'entityreference_modal_node_form_submit';
+  // Actions other than "Save" may break the modal. Hide them.
+  foreach (element_children($form['actions']) as $key) {
+    if ($key != 'submit') {
+      $form['actions'][$key]['#access'] = FALSE;
     }
   }
 }
