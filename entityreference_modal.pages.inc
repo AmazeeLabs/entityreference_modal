@@ -19,10 +19,11 @@ function entityreference_modal_actions_menu_callback($field_name) {
   }
   $bundles = array();
   foreach ($target_bundles as $bundle) {
-    $bundles[$bundle] = $entity_info['bundles'][$bundle]['label'];
+    $bundle_url = $entity_type == 'node' ? str_replace('_', '-', $bundle) : $bundle;
+    $bundles[$bundle_url] = $entity_info['bundles'][$bundle]['label'];
   }
   if (
-    strpos($path_mapping['create-entity']['path'], '[bundle]') === FALSE
+    strpos($path_mapping['create-entity']['path'], '[bundle-url]') === FALSE
     && strpos($path_mapping['create-entity']['label'], '[bundle-label]') === FALSE
   ) {
     $bundles = array('fake' => 'this will not be used');
@@ -36,13 +37,21 @@ function entityreference_modal_actions_menu_callback($field_name) {
 
   // Generate links.
   $links = array();
+  $link_options = array(
+    'query' => array(
+      'entityreference_modal' => '1',
+    ),
+    'attributes' => array(
+      'class' => array('entityreference-modal-action'),
+    ),
+  );
   if ($entity) {
     $source_langcode = entity_language($entity_type, $entity);
     if ($source_langcode == LANGUAGE_NONE) {
       // Edit entity.
       $label = $path_mapping['edit-entity']['label'];
       $path = str_replace('[entity-id]', $entity_id, $path_mapping['edit-entity']['path']);
-      $links[] = l($label, $path);
+      $links[] = l($label, $path, $link_options);
     }
     else {
       // Add/edit entity translations.
@@ -60,7 +69,7 @@ function entityreference_modal_actions_menu_callback($field_name) {
           '[entity-id]' => $entity_id,
         );
         $path = str_replace(array_keys($placeholders), array_values($placeholders), $path_mapping[$key]['path']);
-        $links[] = l($label, $path);
+        $links[] = l($label, $path, $link_options);
       }
     }
     // Open in new tab.
@@ -72,11 +81,31 @@ function entityreference_modal_actions_menu_callback($field_name) {
     // Create new entity (optionally by bundle).
     foreach ($bundles as $bundle => $bundle_label) {
       $label = str_replace('[bundle-label]', $bundle_label, $path_mapping['create-entity']['label']);
-      $path = str_replace('[bundle]', $bundle, $path_mapping['create-entity']['path']);
-      $links[] = l($label, $path);
+      $path = str_replace('[bundle-url]', $bundle, $path_mapping['create-entity']['path']);
+      $links[] = l($label, $path, $link_options);
     }
   }
   drupal_json_output(array(
     'links' => '<li>' . implode('</li><li>', $links) . '</li>',
   ));
+}
+
+/**
+ * Page callback that closes dialog.
+ */
+function entityreference_modal_close_page() {
+  if (!empty($_GET['entityreference_modal_input_value'])) {
+    drupal_add_js(drupal_get_path('module', 'entityreference_modal') . '/entityreference_modal.iframe.js');
+    drupal_add_js(array(
+      'entityreferenceModal' => array(
+        'inputValue' => $_GET['entityreference_modal_input_value'],
+      ),
+    ), 'setting');
+    drupal_add_css('
+    body {
+      display: none;
+    }
+  ', 'inline');
+  }
+  return '';
 }

@@ -6,5 +6,4 @@ package = Fields
 dependencies[] = entityreference
 dependencies[] = entity
 dependencies[] = ctools
-dependencies[] = ctools_automodal
 dependencies[] = entity_translation

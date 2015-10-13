@@ -1,13 +1,18 @@
 (function($) {
 
+  /**
+   * The "id" attribute of the input element near which an Action link was used.
+   */
   var lastActiveElementId = '';
 
-  Drupal.behaviors.entityreferenceModal = {
+  /**
+   * Loads action links for the Actions dropdown.
+   */
+  Drupal.behaviors.entityreferenceModalLoadActions = {
     attach: function(context, settings) {
       if (!settings.entityreferenceModal || !settings.entityreferenceModal.elementIdToFieldNameMap) {
         return;
       }
-
       $.each(settings.entityreferenceModal.elementIdToFieldNameMap, function(elementId, fieldName) {
         if (!settings.entityreferenceModal || !settings.entityreferenceModal.fields || !settings.entityreferenceModal.fields[fieldName]) {
           return;
@@ -38,11 +43,53 @@
     }
   };
 
-  Drupal.ajax.prototype.commands.entityreference_modal_update_input = function(ajax, command, status) {
-    $('#' + lastActiveElementId)
-      .val(command.input_value)
-      .closest('.form-item')
-      .append(command.messages);
+  /**
+   * Behaviors for the action links.
+   */
+  Drupal.behaviors.entityreferenceModalProcessActions = {
+    attach: function (context, settings) {
+      $('a.entityreference-modal-action', context).once('entityreference-modal-action').click(function() {
+        Drupal.EntityreferenceModal.open($(this).attr('href'));
+        return false;
+      });
+    }
+  };
+
+  /**
+   * Dialog functionality.
+   */
+  Drupal.EntityreferenceModal = {
+
+    /**
+     * The jQuery Dialog instance which is currently opened.
+     */
+    dialog: null,
+
+    /**
+     * Opens an URL in the dialog.
+     */
+    open: function (url) {
+      if (!this.dialog) {
+        this.dialog = $('<iframe src="' + url + '" style="min-width: 100%;height:100%;"></iframe>').dialog({
+          width: $(window).width() / 100*80,
+          height: $(window).height() / 100*90,
+          modal: true,
+          resizable: false,
+          position: ['center', 50],
+          close: function () {
+            Drupal.EntityreferenceModal.dialog = null;
+          }
+        });
+      }
+    },
+
+    /**
+     * Closes dialog.
+     */
+    close: function (inputValue) {
+      this.dialog.dialog('close');
+      $('#' + lastActiveElementId).val(inputValue);
+    }
   };
 
 })(jQuery);
