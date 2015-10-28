@@ -96,7 +96,7 @@ function entityreference_modal_actions_access_callback($type, $field_name, $host
  * Implements hook_field_widget_form_alter().
  */
 function entityreference_modal_field_widget_form_alter(&$element, &$form_state, $context) {
-  if ($context['instance']['widget']['type'] == 'entityreference_autocomplete') {
+  if ($context['instance']['widget']['type'] == 'entityreference_autocomplete' && empty($context['field']['settings']['do_not_use_entityreference_modal'])) {
     $host_entity_type = $element['target_id']['#entity_type'];
     $host_bundle = $element['target_id']['#bundle'];
     $field_name = $context['field']['field_name'];
@@ -261,4 +261,25 @@ function entityreference_modal_node_form_submit($form, &$form_state) {
 function entityreference_modal_close($entity_type, $entity) {
   $input_value =& drupal_static('entityreference_modal_input_value');
   $input_value = entity_label($entity_type, $entity) . ' (' . entity_id($entity_type, $entity) . ')';
+}
+
+/**
+ * Implements hook_field_info_alter().
+ */
+function entityreference_modal_field_info_alter(&$info) {
+  $info['entityreference']['settings']['do_not_use_entityreference_modal'] = FALSE;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function entityreference_modal_form_field_ui_field_edit_form_alter(&$form, &$form_state, $form_id) {
+  if ($form['#instance']['widget']['type'] == 'entityreference_autocomplete') {
+    $form['field']['settings']['do_not_use_entityreference_modal'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Do not show "Actions"'),
+      '#description' => t('If checked, the "Actions" menu will be hidden for the field. This is useful when the "Views: Filter by an entity reference view" mode is used, so that Entity Reference Modal module cannot guess target bundles for the "Create" action.'),
+      '#default_value' => $form['#field']['settings']['do_not_use_entityreference_modal'],
+    );
+  }
 }
