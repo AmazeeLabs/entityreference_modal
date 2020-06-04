@@ -29,7 +29,7 @@
             if (listIsVisible) {
               $list.html(initialListContent);
               var match = $autocomplete.val().match(/ \(([0-9]+)\)$/);
-              var entityId = match ? match[1] : null;
+              var entityId = match ? match[1] : 'null';
               var $language = $autocomplete.closest('form').find('select[name=language]:enabled');
               $.post(fieldSettings.actionsUrl, {entity_id: entityId}, function(response) {
                 $list.html(response.links);
